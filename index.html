@@ -4,6 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Restaurant ERP — Управление сетью ресторанов</title>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getDatabase, ref, set, get, onValue, update, push } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+        const firebaseConfig = {
+            databaseURL: "https://coursework-b5a72-default-rtdb.firebaseio.com"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        window.db = db;
+        window.firebaseRef = ref;
+        window.firebaseSet = set;
+        window.firebaseGet = get;
+        window.firebaseOnValue = onValue;
+        window.firebaseUpdate = update;
+        window.firebasePush = push;
+    </script>
+
     <style>
         :root {
             --bg: #0f172a; --surface: #1e293b; --surface-hover: #273549;
@@ -14,10 +35,28 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
-        /* === COMMON === */
-        .page { display: none; min-height: 100vh; }
+        /* Status bar */
+        .status-bar {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+            padding: 6px 16px; font-size: 11px; text-align: center;
+            display: flex; justify-content: center; align-items: center; gap: 8px;
+            transition: all 0.3s;
+        }
+        .status-bar.connected { background: #14532d; color: #86efac; }
+        .status-bar.disconnected { background: #7f1d1d; color: #fca5a5; }
+        .status-bar.syncing { background: #713f12; color: #fde68a; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .status-dot.green { background: #22c55e; animation: pulse-dot 1.5s infinite; }
+        .status-dot.red { background: #ef4444; }
+        .status-dot.yellow { background: #f59e0b; animation: pulse-dot 0.8s infinite; }
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        /* Page system */
+        .page { display: none; min-height: 100vh; padding-top: 32px; }
         .page.active { display: flex; }
-        .sidebar { width: 250px; min-width: 250px; background: var(--surface); padding: 24px 16px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; position: fixed; top: 0; left: 0; bottom: 0; z-index: 50; overflow-y: auto; }
+
+        /* Sidebar */
+        .sidebar { width: 250px; min-width: 250px; background: var(--surface); padding: 24px 16px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; position: fixed; top: 32px; left: 0; bottom: 0; z-index: 50; overflow-y: auto; }
         .sidebar-logo { font-size: 20px; font-weight: 700; margin-bottom: 8px; color: var(--accent); text-decoration: none; display: block; cursor: pointer; }
         .sidebar-subtitle { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
         .sidebar nav { display: flex; flex-direction: column; gap: 4px; }
@@ -27,6 +66,8 @@
         .sidebar-footer { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
         .sidebar-footer a { display: block; padding: 8px 14px; color: var(--muted); text-decoration: none; font-size: 13px; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
         .sidebar-footer a:hover { color: var(--text); background: var(--surface-hover); }
+
+        /* Main */
         .main { margin-left: 250px; flex: 1; padding: 24px 32px; }
         .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; flex-wrap: wrap; gap: 16px; }
         .topbar h1 { font-size: 26px; font-weight: 700; }
@@ -40,21 +81,18 @@
         .metric-value { font-size: 30px; font-weight: 700; line-height: 1.2; }
         .metric-value.up { color: var(--success); } .metric-value.down { color: var(--danger); } .metric-value.warn { color: var(--warning); }
         .metric-label { font-size: 12px; color: var(--muted); margin-top: 6px; }
-        .metric-change { font-size: 11px; margin-top: 4px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
         th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; }
         .tag { padding: 3px 10px; border-radius: 14px; font-size: 11px; font-weight: 600; display: inline-block; }
         .tag-danger { background: #7f1d1d; color: #fca5a5; } .tag-success { background: #14532d; color: #86efac; }
         .tag-warning { background: #713f12; color: #fde68a; } .tag-info { background: #1e3a5f; color: #93c5fd; }
-        .tag-a { background: #1e3a5f; color: #93c5fd; } .tag-b { background: #14532d; color: #86efac; } .tag-c { background: #713f12; color: #fde68a; }
         .badge { padding: 3px 10px; border-radius: 14px; font-size: 11px; font-weight: 600; display: inline-block; }
         .badge-vip { background: #4c1d95; color: #ddd6fe; } .badge-deposit { background: #064e3b; color: #86efac; }
-        .badge-loyalty { background: #4c1d95; color: #ddd6fe; }
         .btn { padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; font-size: 13px; transition: all 0.2s; }
         .btn-accent { background: var(--accent); color: #000; } .btn-accent:hover { background: var(--accent-hover); }
         .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); } .btn-ghost:hover { background: var(--surface-hover); }
-        .btn-danger { background: var(--danger); color: #fff; } .btn-danger:hover { opacity: 0.9; }
+        .btn-danger { background: var(--danger); color: #fff; }
         .btn-sm { padding: 6px 12px; font-size: 11px; }
         .flex-row { display: flex; gap: 10px; align-items: center; }
         .flex-between { display: flex; justify-content: space-between; align-items: center; }
@@ -65,7 +103,6 @@
         .alert-warning { background: #713f12; color: #fde68a; border: 1px solid #854d0e; }
         .alert-success { background: #14532d; color: #86efac; border: 1px solid #166534; }
         .alert-info { background: #1e3a5f; color: #93c5fd; border: 1px solid #1e40af; }
-        .alert-purple { background: #4c1d95; color: #ddd6fe; }
         input, select, textarea { padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; font-family: inherit; }
         textarea { resize: vertical; }
         .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 100; align-items: center; justify-content: center; }
@@ -73,13 +110,10 @@
         .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; max-width: 550px; width: 90%; max-height: 85vh; overflow-y: auto; }
         .modal h3 { margin-bottom: 16px; font-size: 18px; }
         .modal .order-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
-        .form-group { margin-bottom: 14px; }
-        .form-group label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-        .form-group input, .form-group select, .form-group textarea { width: 100%; }
 
-        /* === OWNERS: Floor & Kitchen === */
+        /* Floor plan */
         .floor-plan { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-        .table-spot { aspect-ratio: 1; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; position: relative; min-width: 60px; }
+        .table-spot { aspect-ratio: 1; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; min-width: 60px; }
         .table-spot:hover { transform: scale(1.05); z-index: 2; }
         .table-spot.free { background: #14532d; color: #86efac; border: 1px solid #166534; }
         .table-spot.waiting-order { background: #713f12; color: #fde68a; border: 1px solid #854d0e; animation: pulse 2s infinite; }
@@ -88,29 +122,34 @@
         .table-seats { font-size: 10px; opacity: 0.8; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.75; } }
         @keyframes urgent-blink { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); } 50% { box-shadow: 0 0 0 10px rgba(239,68,68,0); } }
+
+        /* Kitchen */
         .kitchen-board { display: flex; gap: 16px; }
         .kitchen-col { flex: 1; }
-        .kitchen-col h4 { font-size: 13px; color: var(--muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .order-ticket { background: var(--surface-hover); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; border-left: 4px solid var(--accent); transition: all 0.2s; }
+        .kitchen-col h4 { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+        .order-ticket { background: var(--surface-hover); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; border-left: 4px solid var(--accent); }
         .order-ticket.burning { border-left-color: var(--danger); animation: urgent-blink 1s infinite; }
         .order-ticket-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
         .order-ticket-id { font-weight: 700; }
         .order-timer { color: var(--danger); font-size: 11px; font-weight: 600; }
         .booking-slot { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--surface-hover); border-radius: 8px; margin-bottom: 8px; font-size: 13px; }
 
-        /* === FINANCE: Charts === */
-        .bar-chart { display: flex; gap: 8px; align-items: flex-end; height: 150px; padding-top: 20px; }
-        .bar { flex: 1; border-radius: 6px 6px 0 0; text-align: center; padding-top: 8px; font-size: 11px; color: #fff; font-weight: 600; }
-        .bar-label { text-align: center; font-size: 11px; color: var(--muted); margin-top: 6px; }
-        .progress-large { margin: 12px 0; }
-        .progress-large .label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
-        .progress-bar { height: 12px; border-radius: 6px; background: var(--border); overflow: hidden; }
-        .progress-fill { height: 100%; border-radius: 6px; transition: width 0.8s ease; }
+        /* Home */
+        .home-container { max-width: 1100px; width: 100%; margin: 0 auto; padding: 40px 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+        .home-header { text-align: center; margin-bottom: 48px; }
+        .home-header h1 { font-size: 36px; font-weight: 700; margin-bottom: 12px; background: linear-gradient(135deg, var(--accent), #fbbf24); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .home-header p { color: var(--muted); font-size: 16px; max-width: 600px; margin: 0 auto; line-height: 1.6; }
+        .role-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; width: 100%; }
+        .role-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px 24px; text-align: center; cursor: pointer; transition: all 0.3s; color: var(--text); }
+        .role-card:hover { border-color: var(--accent); transform: translateY(-6px); box-shadow: 0 12px 40px rgba(245, 158, 11, 0.15); }
+        .role-icon { font-size: 52px; margin-bottom: 20px; display: block; }
+        .role-title { font-size: 18px; font-weight: 600; margin-bottom: 10px; }
+        .role-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
+        .home-footer { text-align: center; margin-top: 40px; color: var(--muted); font-size: 12px; }
 
-        /* === GUEST === */
+        /* Guest */
         .menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
-        .menu-item { background: var(--surface-hover); border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
-        .menu-item:hover { border-color: var(--accent); transform: translateY(-2px); }
+        .menu-item { background: var(--surface-hover); border-radius: 12px; padding: 16px; border: 1px solid transparent; }
         .menu-item h4 { margin-bottom: 6px; }
         .menu-item .desc { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
         .menu-item .price { font-size: 18px; font-weight: 700; color: var(--accent); }
@@ -121,81 +160,39 @@
         .cart-total { display: flex; justify-content: space-between; padding: 16px 0; font-size: 18px; font-weight: 700; }
         .review { background: var(--surface-hover); border-radius: 10px; padding: 14px; margin-bottom: 10px; }
         .review .stars { color: var(--accent); }
-        .qr-box { width: 150px; height: 150px; background: #fff; margin: 0 auto 16px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 64px; }
 
-        /* === HOME === */
-        .home-container { max-width: 1100px; width: 100%; margin: 0 auto; padding: 40px 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
-        .home-header { text-align: center; margin-bottom: 48px; }
-        .home-header h1 { font-size: 36px; font-weight: 700; margin-bottom: 12px; background: linear-gradient(135deg, var(--accent), #fbbf24, #f59e0b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .home-header p { color: var(--muted); font-size: 16px; max-width: 600px; margin: 0 auto; line-height: 1.6; }
-        .role-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; width: 100%; }
-        .role-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px 24px; text-align: center; cursor: pointer; transition: all 0.3s; color: var(--text); position: relative; overflow: hidden; }
-        .role-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--accent); transform: scaleX(0); transition: transform 0.3s; }
-        .role-card:hover { border-color: var(--accent); transform: translateY(-6px); box-shadow: 0 12px 40px rgba(245, 158, 11, 0.15); background: var(--surface-hover); }
-        .role-card:hover::before { transform: scaleX(1); }
-        .role-icon { font-size: 52px; margin-bottom: 20px; display: block; transition: transform 0.3s; }
-        .role-card:hover .role-icon { transform: scale(1.1); }
-        .role-title { font-size: 18px; font-weight: 600; margin-bottom: 10px; }
-        .role-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
-        .role-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-top: 12px; background: rgba(245,158,11,0.15); color: var(--accent); }
-        .home-footer { text-align: center; margin-top: 40px; color: var(--muted); font-size: 12px; }
-
-        @media (max-width: 1024px) {
-            .grid-2, .grid-3 { grid-template-columns: 1fr; }
-            .grid-4 { grid-template-columns: repeat(2, 1fr); }
-        }
+        @media (max-width: 1024px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } .grid-4 { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 768px) {
             .sidebar { width: 60px; min-width: 60px; padding: 16px 8px; }
-            .sidebar nav a span:not(.icon), .sidebar-logo, .sidebar-subtitle, .sidebar-footer a span { display: none; }
+            .sidebar nav a span:not(.icon), .sidebar-logo, .sidebar-subtitle { display: none; }
             .sidebar nav a { justify-content: center; }
             .main { margin-left: 60px; padding: 16px; }
             .menu-grid { grid-template-columns: 1fr; }
-            .home-header h1 { font-size: 28px; }
-            .role-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
         }
     </style>
 </head>
 <body>
 
-<!-- ======================== HOME PAGE ======================== -->
+<!-- Status Bar -->
+<div class="status-bar disconnected" id="statusBar">
+    <span class="status-dot red" id="statusDot"></span>
+    <span id="statusText">Подключение к Firebase...</span>
+</div>
+
+<!-- ==================== HOME PAGE ==================== -->
 <div class="page active" id="page-home">
     <div class="home-container">
-        <div class="home-header">
-            <h1>🍽️ Restaurant ERP</h1>
-            <p>Единая система управления сетью ресторанов. Выберите вашу роль для входа в панель управления.</p>
-        </div>
+        <div class="home-header"><h1>🍽️ Restaurant ERP</h1><p>Единая система управления сетью ресторанов. Данные синхронизируются через Firebase в реальном времени.</p></div>
         <div class="role-grid">
-            <div class="role-card" onclick="navigate('owners')">
-                <span class="role-icon">👑</span><div class="role-title">Владельцы</div>
-                <div class="role-desc">Визуализация зала, план-фактный анализ, управление сетью</div>
-                <span class="role-badge">Полный доступ</span>
-            </div>
-            <div class="role-card" onclick="navigate('staff')">
-                <span class="role-icon">👨‍🍳</span><div class="role-title">Персонал</div>
-                <div class="role-desc">Техкарты, меню, HR, биржа смен, геймификация</div>
-                <span class="role-badge">Управление</span>
-            </div>
-            <div class="role-card" onclick="navigate('finance')">
-                <span class="role-icon">📊</span><div class="role-title">Финансы</div>
-                <div class="role-desc">Food Cost, EBITDA, ML-прогноз выручки, план-факт</div>
-                <span class="role-badge">Аналитика</span>
-            </div>
-            <div class="role-card" onclick="navigate('warehouse')">
-                <span class="role-icon">📦</span><div class="role-title">Склад</div>
-                <div class="role-desc">Списания, ABC-анализ, умный заказ, маркетплейс</div>
-                <span class="role-badge">Логистика</span>
-            </div>
-            <div class="role-card" onclick="navigate('guest')">
-                <span class="role-icon">🍽️</span><div class="role-title">Гость</div>
-                <div class="role-desc">QR-меню, лояльность, отзывы, история заказов</div>
-                <span class="role-badge">Клиент</span>
-            </div>
+            <div class="role-card" onclick="navigate('owners')"><span class="role-icon">👑</span><div class="role-title">Владельцы</div><div class="role-desc">Визуализация зала, план-фактный анализ, управление сетью</div></div>
+            <div class="role-card" onclick="navigate('staff')"><span class="role-icon">👨‍🍳</span><div class="role-title">Персонал</div><div class="role-desc">Техкарты, меню, HR, биржа смен, геймификация</div></div>
+            <div class="role-card" onclick="navigate('guest')"><span class="role-icon">🍽️</span><div class="role-title">Гость</div><div class="role-desc">QR-меню, лояльность, отзывы, история заказов</div></div>
         </div>
-        <div class="home-footer"><p>Restaurant ERP System v1.0 • Все данные демонстрационные</p></div>
+        <div class="home-footer"><p>Restaurant ERP System v2.0 • Firebase Realtime Database • Данные обновляются мгновенно</p></div>
     </div>
 </div>
 
-<!-- ======================== OWNERS PAGE ======================== -->
+<!-- ==================== OWNERS PAGE ==================== -->
 <div class="page" id="page-owners">
     <aside class="sidebar">
         <div class="sidebar-logo" onclick="navigate('home')">🍽️ Сеть «Вкус»</div>
@@ -205,175 +202,145 @@
             <a data-subview="floor">🗺️ План зала</a>
             <a data-subview="kitchen">🔥 Монитор кухни</a>
             <a data-subview="booking">📅 Бронирование</a>
-            <a data-subview="analytics">📊 Аналитика</a>
-            <a data-subview="network">🏢 Сеть</a>
         </nav>
         <div class="sidebar-footer"><a onclick="navigate('home')">↩️ Выход</a></div>
     </aside>
     <main class="main">
-        <div class="topbar">
-            <h1>👑 Панель владельца</h1>
-            <select id="ownersRestaurant"><option>Ресторан «Центральный»</option><option>Ресторан «Парковый»</option><option>Ресторан «Набережный»</option><option>🌐 Вся сеть</option></select>
-        </div>
+        <div class="topbar"><h1>👑 Панель владельца</h1><span style="font-size:12px;color:var(--muted);" id="ownersSyncStatus"></span></div>
         <div class="view-panel active" data-owners="dashboard"><div class="grid-4" id="ownersMetrics"></div><div class="grid-2"><div class="card"><div class="card-header"><h3>🗺️ План зала</h3></div><div class="floor-plan" id="ownersMiniFloor"></div></div><div class="card"><div class="card-header"><h3>🔥 Кухня</h3></div><div id="ownersMiniKitchen"></div></div></div></div>
         <div class="view-panel" data-owners="floor"><div class="card"><div class="card-header"><h3>🗺️ Полный план зала</h3></div><div class="floor-plan" id="ownersFullFloor"></div><div style="margin-top:12px;font-size:12px;color:var(--muted);">🟢Свободен 🟠Ждёт заказ 🔵Ожидает оплату 🔴Просрочен</div></div></div>
         <div class="view-panel" data-owners="kitchen"><div class="card"><div class="card-header"><h3>🔥 KDS — Монитор кухни</h3></div><div class="kitchen-board" id="ownersKitchenBoard"></div></div></div>
         <div class="view-panel" data-owners="booking"><div class="card"><div class="card-header"><h3>📅 Бронирования</h3></div><div id="ownersBookingList"></div></div></div>
-        <div class="view-panel" data-owners="analytics"><div class="grid-2"><div class="card"><div class="card-header"><h3>📊 Food Cost (План-Факт)</h3></div><div id="ownersFoodCost"></div></div><div class="card"><div class="card-header"><h3>💰 EBITDA / м²</h3></div><div id="ownersEbitda"></div></div></div><div class="card"><div class="card-header"><h3>🤖 ML-прогноз выручки</h3></div><div id="ownersML"></div></div></div>
-        <div class="view-panel" data-owners="network"><div class="grid-3" id="ownersNetworkMetrics"></div><div class="card"><div class="card-header"><h3>🏢 Сравнение ресторанов</h3></div><div id="ownersNetworkComparison"></div></div></div>
     </main>
 </div>
 
-<!-- Owners Modal -->
+<!-- Owners Table Modal -->
 <div class="modal-overlay" id="ownersTableModal">
-    <div class="modal"><h3 id="ownersModalTitle"></h3><div id="ownersModalContent"></div><div id="ownersModalTimer" style="margin-top:12px;padding:8px;background:var(--surface-hover);border-radius:8px;font-size:12px;color:var(--muted);"></div><div class="flex-end"><button class="btn btn-ghost btn-sm" onclick="closeOwnersModal()">Закрыть</button><button class="btn btn-accent btn-sm" onclick="alert('✅ Чек распечатан')">🖨️ Чек</button><button class="btn btn-danger btn-sm" onclick="closeTableOwners()">💳 Закрыть стол</button></div></div>
+    <div class="modal"><h3 id="ownersModalTitle"></h3><div id="ownersModalContent"></div><div class="flex-end"><button class="btn btn-ghost btn-sm" onclick="closeOwnersModal()">Закрыть</button><button class="btn btn-danger btn-sm" onclick="closeTableOwners()">💳 Закрыть стол</button></div></div>
 </div>
 
-<!-- ======================== STAFF PAGE ======================== -->
+<!-- ==================== STAFF PAGE ==================== -->
 <div class="page" id="page-staff">
     <aside class="sidebar">
         <div class="sidebar-logo" onclick="navigate('home')">👨‍🍳 Персонал</div>
         <p class="sidebar-subtitle">Управление рестораном</p>
         <nav>
-            <a class="active" data-subview="menu">📋 Меню и техкарты</a>
+            <a class="active" data-subview="menu">📋 Меню</a>
             <a data-subview="hr">👥 Сотрудники</a>
             <a data-subview="shifts">🔄 Биржа смен</a>
-            <a data-subview="gamification">🏆 Геймификация</a>
         </nav>
         <div class="sidebar-footer"><a onclick="navigate('home')">↩️ Выход</a></div>
     </aside>
     <main class="main">
         <div class="topbar"><h1>👨‍🍳 Панель персонала</h1></div>
-        <div class="view-panel active" data-staff="menu"><div class="card"><div class="card-header"><h3>📋 Меню</h3><div class="flex-row"><select id="staffRestaurantFilter" onchange="renderStaffMenu()"><option>Все рестораны</option><option>Центральный</option><option>Парковый</option><option>Набережный</option></select><button class="btn btn-accent btn-sm" onclick="openStaffTechModal()">+ Блюдо</button></div></div><table><thead><tr><th>Блюдо</th><th>Себест.</th><th>Цена</th><th>Маржа</th><th>Рестораны</th><th></th></tr></thead><tbody id="staffMenuBody"></tbody></table></div></div>
-        <div class="view-panel" data-staff="hr"><div class="card"><div class="card-header"><h3>👥 Сотрудники</h3></div><table><thead><tr><th>Имя</th><th>Должность</th><th>Медкнижка</th><th>Статус</th></tr></thead><tbody id="staffHrBody"></tbody></table></div></div>
+        <div class="view-panel active" data-staff="menu"><div class="card"><div class="card-header"><h3>📋 Меню</h3></div><table><thead><tr><th>Блюдо</th><th>Цена</th><th>Действие</th></tr></thead><tbody id="staffMenuBody"></tbody></table></div></div>
+        <div class="view-panel" data-staff="hr"><div class="card"><div class="card-header"><h3>👥 Сотрудники</h3></div><table><thead><tr><th>Имя</th><th>Должность</th><th>Медкнижка</th></tr></thead><tbody id="staffHrBody"></tbody></table></div></div>
         <div class="view-panel" data-staff="shifts"><div class="card"><div class="card-header"><h3>🔄 Биржа смен</h3></div><div id="staffShiftsBody"></div></div></div>
-        <div class="view-panel" data-staff="gamification"><div class="card"><div class="card-header"><h3>🏆 Рейтинг официантов</h3></div><div id="staffGamificationBody"></div></div></div>
     </main>
 </div>
 
-<!-- Staff Tech Modal -->
-<div class="modal-overlay" id="staffTechModal">
-    <div class="modal"><h3>📝 Техкарта</h3><div class="form-group"><label>Название</label><input id="staffDishName" value="Салат Цезарь"></div><div class="form-group"><label>Ингредиенты</label><textarea id="staffIngredients" rows="4">Куриное филе: 150г/120г (20%)
-Салат: 80г/75г (6%)
-Соус: 50г/50г
-Пармезан: 20г/20г</textarea></div><div class="form-group"><label>Модификаторы</label><select multiple style="height:80px;"><option>Без курицы</option><option>Двойная порция</option><option>Без гренок</option></select></div><div class="flex-end"><button class="btn btn-ghost btn-sm" onclick="closeStaffTechModal()">Отмена</button><button class="btn btn-accent btn-sm" onclick="saveStaffTech()">💾 Сохранить</button></div></div>
-</div>
-
-<!-- ======================== FINANCE PAGE ======================== -->
-<div class="page" id="page-finance">
-    <aside class="sidebar">
-        <div class="sidebar-logo" onclick="navigate('home')">📊 Финансы</div>
-        <p class="sidebar-subtitle">Аналитика сети</p>
-        <nav>
-            <a class="active" data-subview="foodcost">🍽️ Food Cost</a>
-            <a data-subview="ebitda">💰 EBITDA</a>
-            <a data-subview="forecast">🤖 ML-Прогноз</a>
-            <a data-subview="reports">📑 Отчёты</a>
-        </nav>
-        <div class="sidebar-footer"><a onclick="navigate('home')">↩️ Выход</a></div>
-    </aside>
-    <main class="main">
-        <div class="topbar"><h1>📊 Финансы и аналитика</h1></div>
-        <div class="view-panel active" data-finance="foodcost"><div class="grid-2"><div class="card"><div class="card-header"><h3>План-фактный анализ</h3></div><div class="progress-large"><div class="label"><span>План</span><span style="color:var(--success)">28%</span></div><div class="progress-bar"><div class="progress-fill" style="width:28%;background:var(--success);"></div></div></div><div class="progress-large"><div class="label"><span>Факт</span><span style="color:var(--danger)">32%</span></div><div class="progress-bar"><div class="progress-fill" style="width:32%;background:var(--danger);"></div></div></div><div class="alert-box alert-danger">⚠️ Перерасход: +4% (~32 500 ₽/день). Причина: повар кладёт сыр мимо весов.</div></div><div class="card"><div class="card-header"><h3>По ресторанам</h3></div><table><tr><th>Ресторан</th><th>План</th><th>Факт</th><th>Δ</th></tr><tr><td>Центральный</td><td>28%</td><td>28%</td><td style="color:var(--success)">✅ 0%</td></tr><tr><td>Парковый</td><td>28%</td><td>30%</td><td style="color:var(--warning)">⚠️ +2%</td></tr><tr><td>Набережный</td><td>28%</td><td>35%</td><td style="color:var(--danger)">🔴 +7%</td></tr></table></div></div></div>
-        <div class="view-panel" data-finance="ebitda"><div class="grid-2"><div class="card"><div class="card-header"><h3>EBITDA на м²</h3></div><div class="bar-chart"><div style="display:flex;flex-direction:column;align-items:center;flex:1;"><div class="bar" style="height:120px;background:var(--success);">12 400</div><div class="bar-label">Центр.<br>48м</div></div><div style="display:flex;flex-direction:column;align-items:center;flex:1;"><div class="bar" style="height:95px;background:var(--info);">9 800</div><div class="bar-label">Парк.<br>64м</div></div><div style="display:flex;flex-direction:column;align-items:center;flex:1;"><div class="bar" style="height:60px;background:var(--danger);">6 200</div><div class="bar-label">Набер.<br>36м</div></div></div></div><div class="card"><div class="card-header"><h3>Сводка</h3></div><table><tr><th>Показатель</th><th>Центр.</th><th>Парк.</th><th>Набер.</th></tr><tr><td>Выручка/день</td><td>₽485K</td><td>₽420K</td><td>₽335K</td></tr><tr><td>Средний чек</td><td>₽2400</td><td>₽1900</td><td>₽1600</td></tr><tr><td>Гости/день</td><td>202</td><td>221</td><td>209</td></tr></table></div></div></div>
-        <div class="view-panel" data-finance="forecast"><div class="card"><div class="card-header"><h3>🤖 ML-прогноз на завтра</h3></div><div class="grid-3"><div style="text-align:center;"><div class="metric-value up">₽310K</div><div class="metric-label">Прогноз</div></div><div style="text-align:center;"><div class="metric-value">☀️+28°C</div><div class="metric-label">Погода</div></div><div style="text-align:center;"><div class="metric-value warn">+30%</div><div class="metric-label">К супам</div></div></div><div class="alert-box alert-warning" style="margin-top:16px;">💡 Солнечная пятница — увеличьте закупку ингредиентов для окрошки на 30%.</div></div></div>
-        <div class="view-panel" data-finance="reports"><div class="card"><div class="card-header"><h3>📑 Быстрые отчёты</h3></div><div class="grid-3"><div class="card" style="background:var(--surface-hover);text-align:center;cursor:pointer;" onclick="alert('📥 Отчёт скачивается...')"><div style="font-size:32px;">📄</div><div style="font-weight:600;">Сегодня</div></div><div class="card" style="background:var(--surface-hover);text-align:center;cursor:pointer;" onclick="alert('📥 Отчёт скачивается...')"><div style="font-size:32px;">📊</div><div style="font-weight:600;">Неделя</div></div><div class="card" style="background:var(--surface-hover);text-align:center;cursor:pointer;" onclick="alert('📥 Отчёт скачивается...')"><div style="font-size:32px;">🏢</div><div style="font-weight:600;">Сеть</div></div></div></div></div>
-    </main>
-</div>
-
-<!-- ======================== WAREHOUSE PAGE ======================== -->
-<div class="page" id="page-warehouse">
-    <aside class="sidebar">
-        <div class="sidebar-logo" onclick="navigate('home')">📦 Склад</div>
-        <p class="sidebar-subtitle">Управление запасами</p>
-        <nav>
-            <a class="active" data-subview="inventory">📋 Остатки и списания</a>
-            <a data-subview="abc">📊 ABC-анализ</a>
-            <a data-subview="order">🛒 Умный заказ</a>
-            <a data-subview="marketplace">🏪 Маркетплейс</a>
-        </nav>
-        <div class="sidebar-footer"><a onclick="navigate('home')">↩️ Выход</a></div>
-    </aside>
-    <main class="main">
-        <div class="topbar"><h1>📦 Управление складом</h1><select><option>Склад «Центральный»</option><option>Склад «Парковый»</option><option>Склад «Набережный»</option></select></div>
-        <div class="view-panel active" data-warehouse="inventory"><div class="grid-2"><div class="card"><div class="card-header"><h3>Списание: факт vs техкарта</h3></div><table><tr><th>Ингредиент</th><th>Техкарта</th><th>Факт</th><th>Δ</th></tr><tr><td>Куриное филе</td><td>24 кг</td><td>26 кг</td><td style="color:var(--danger)">+2 кг</td></tr><tr><td>Сыр Пармезан</td><td>8 кг</td><td>11 кг</td><td style="color:var(--danger)">+3 кг ⚠️</td></tr><tr><td>Мука</td><td>40 кг</td><td>39 кг</td><td style="color:var(--success)">-1 кг</td></tr></table><div class="alert-box alert-danger">⚠️ Пересорт по сыру: 37% расхождения.</div></div><div class="card"><div class="card-header"><h3>Текущие остатки</h3></div><table><tr><th>Товар</th><th>Остаток</th><th>Норма</th><th>Статус</th></tr><tr><td>Авокадо</td><td>45 шт</td><td>30 шт</td><td style="color:var(--success)">✅</td></tr><tr><td>Лосось</td><td>5 кг</td><td>12 кг</td><td style="color:var(--danger)">🔴</td></tr><tr><td>Помидоры</td><td>18 кг</td><td>15 кг</td><td style="color:var(--warning)">⚠️</td></tr></table></div></div></div>
-        <div class="view-panel" data-warehouse="abc"><div class="card"><div class="card-header"><h3>📊 ABC-анализ</h3></div><table><tr><th>Категория</th><th>Товар</th><th>Доля</th><th>Оборот</th><th>Класс</th></tr><tr><td>Мясо</td><td>Стейк Рибай</td><td>22%</td><td>Выс.</td><td><span class="tag tag-a">A</span></td></tr><tr><td>Мясо</td><td>Куриное филе</td><td>15%</td><td>Выс.</td><td><span class="tag tag-a">A</span></td></tr><tr><td>Бакалея</td><td>Мука</td><td>8%</td><td>Сред.</td><td><span class="tag tag-b">B</span></td></tr><tr><td>Овощи</td><td>Помидоры</td><td>3%</td><td>Низ.</td><td><span class="tag tag-c">C</span></td></tr></table></div></div>
-        <div class="view-panel" data-warehouse="order"><div class="card"><div class="card-header"><h3>🛒 Умный заказ</h3></div><div class="alert-box alert-info">🤖 Прогноз: пятница +28°C → +30% к холодным супам.</div><table style="margin-top:16px;"><tr><th>Товар</th><th>Остаток</th><th>Прогноз</th><th>Заказать</th></tr><tr><td>Кефир</td><td>10 л</td><td>28 л</td><td style="color:var(--danger);font-weight:600;">18 л</td></tr><tr><td>Огурцы</td><td>8 кг</td><td>22 кг</td><td style="color:var(--danger);font-weight:600;">14 кг</td></tr></table><button class="btn btn-accent" style="margin-top:16px;" onclick="alert('✅ Заказ отправлен!')">📤 Отправить</button></div></div>
-        <div class="view-panel" data-warehouse="marketplace"><div class="card"><div class="card-header"><h3>🏪 Внутренний маркетплейс</h3></div><div class="alert-box alert-success">💡 «Центральный»: избыток авокадо (45 шт). «Набережный»: нужны для банкета.</div><div class="card" style="background:var(--surface-hover);margin-top:16px;"><div class="flex-between"><div><strong>🥑 Авокадо — 15 шт</strong><div style="font-size:12px;color:var(--muted);">Центральный → Набережный</div></div><div class="flex-row"><span style="color:var(--success);font-weight:600;">Экономия: 4 500 ₽</span><button class="btn btn-accent btn-sm" onclick="alert('✅ Перемещение согласовано!')">Переместить</button></div></div></div></div></div>
-    </main>
-</div>
-
-<!-- ======================== GUEST PAGE ======================== -->
+<!-- ==================== GUEST PAGE ==================== -->
 <div class="page" id="page-guest">
     <div style="max-width:900px;margin:0 auto;padding:20px;width:100%;">
         <div class="flex-between" style="padding:16px 0;margin-bottom:24px;border-bottom:1px solid var(--border);"><h1 style="font-size:22px;">🍽️ Сеть «Вкус»</h1><div class="flex-row"><span style="font-size:12px;color:var(--muted);">Стол №3 •</span><a onclick="navigate('home')" style="color:var(--muted);cursor:pointer;font-size:13px;">Выход</a></div></div>
-        <div class="flex-row" style="margin-bottom:20px;gap:4px;"><button class="btn btn-ghost btn-sm active" data-guest="menu" id="guestTabMenu">📋 Меню</button><button class="btn btn-ghost btn-sm" data-guest="cart" id="guestTabCart">🛒 Корзина <span id="guestCartBadge" style="background:var(--accent);color:#000;padding:1px 6px;border-radius:10px;font-size:11px;">0</span></button><button class="btn btn-ghost btn-sm" data-guest="loyalty" id="guestTabLoyalty">🎁 Лояльность</button><button class="btn btn-ghost btn-sm" data-guest="reviews" id="guestTabReviews">⭐ Отзывы</button></div>
-        <div class="view-panel active" data-guest="menu"><div class="card"><div class="card-header"><h3>📋 Цифровое меню (QR-код стола №3)</h3></div><div class="menu-grid" id="guestMenuGrid"></div></div><div class="card" id="guestRecommendations" style="display:none;"><div class="card-header"><h3>💡 Рекомендуем</h3></div><div id="guestRecContent"></div></div></div>
+        <div class="flex-row" style="margin-bottom:20px;gap:4px;"><button class="btn btn-ghost btn-sm active" data-guest="menu">📋 Меню</button><button class="btn btn-ghost btn-sm" data-guest="cart">🛒 Корзина <span id="guestCartBadge" style="background:var(--accent);color:#000;padding:1px 6px;border-radius:10px;font-size:11px;">0</span></button><button class="btn btn-ghost btn-sm" data-guest="reviews">⭐ Отзывы</button></div>
+        <div class="view-panel active" data-guest="menu"><div class="card"><div class="card-header"><h3>📋 Меню</h3></div><div class="menu-grid" id="guestMenuGrid"></div></div></div>
         <div class="view-panel" data-guest="cart"><div class="card"><div class="card-header"><h3>🛒 Корзина</h3></div><div id="guestCartItems"><p style="color:var(--muted);">Пусто</p></div><div class="cart-total" id="guestCartTotal"></div><button class="btn btn-accent" onclick="submitGuestOrder()" id="guestSubmitBtn" disabled>📤 Отправить на кухню</button></div></div>
-        <div class="view-panel" data-guest="loyalty"><div class="card"><div class="card-header"><h3>🎁 Лояльность</h3></div><div style="text-align:center;padding:20px;"><div style="font-size:48px;font-weight:700;color:var(--accent);">1 240 баллов</div><div style="color:var(--muted);">Ваш баланс</div></div></div><div class="card"><div class="card-header"><h3>🎯 Акции</h3></div><div class="alert-box alert-purple">🎂 Вы не были 14 дней — «Тирамису» в подарок!</div><div class="alert-box alert-success" style="margin-top:8px;">💎 Кэшбек 10% в будни после 20:00</div></div></div>
-        <div class="view-panel" data-guest="reviews"><div class="card"><div class="card-header"><h3>⭐ Отзывы</h3></div><div class="review"><div class="flex-between"><strong>Анна</strong><span style="font-size:11px;color:var(--muted);">2 мин назад</span></div><div class="stars">⭐⭐⭐⭐⭐</div><p style="font-size:13px;margin-top:4px;">Отличный стейк!</p></div><div class="review"><div class="flex-between"><strong>Михаил</strong><span style="font-size:11px;color:var(--muted);">15 мин назад</span></div><div class="stars">⭐⭐</div><p style="font-size:13px;margin-top:4px;">Долго ждали.</p><div style="margin-top:8px;padding:8px;background:#14532d;border-radius:6px;font-size:12px;color:#86efac;">✅ Администратор решает проблему.</div></div><textarea rows="3" placeholder="Ваш отзыв..." style="margin-top:16px;"></textarea><div class="flex-row" style="margin-top:8px;"><span>Оценка:</span><select><option>⭐⭐⭐⭐⭐</option><option>⭐⭐⭐⭐</option><option>⭐⭐⭐</option><option>⭐⭐</option><option>⭐</option></select><button class="btn btn-accent btn-sm" onclick="alert('✅ Спасибо!')">Отправить</button></div></div></div>
+        <div class="view-panel" data-guest="reviews"><div class="card"><div class="card-header"><h3>⭐ Отзывы</h3></div><div id="guestReviewsList"></div><textarea rows="3" placeholder="Ваш отзыв..." style="margin-top:16px;" id="guestReviewText"></textarea><div class="flex-row" style="margin-top:8px;"><span>Оценка:</span><select id="guestReviewRating"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select><button class="btn btn-accent btn-sm" onclick="submitGuestReview()">Отправить</button></div></div></div>
     </div>
 </div>
 
-<script>
-// ==================== MOCK DATA ====================
-const OWNERS_TABLES = [
-    { id: 1, seats: 2, status: 'free', order: null, timer: null },
-    { id: 2, seats: 4, status: 'waiting-order', order: [{ name: 'Салат Цезарь', qty: 2, price: 450 }, { name: 'Стейк Рибай', qty: 1, price: 1450 }], timer: 18 },
-    { id: 3, seats: 2, status: 'waiting-payment', order: [{ name: 'Тирамису', qty: 1, price: 380 }, { name: 'Капучино', qty: 2, price: 220 }], timer: 5 },
-    { id: 4, seats: 6, status: 'waiting-order', order: [{ name: 'Борщ', qty: 3, price: 290 }, { name: 'Котлета', qty: 3, price: 420 }], timer: 22 },
-    { id: 5, seats: 4, status: 'free', order: null, timer: null },
-    { id: 6, seats: 2, status: 'free', order: null, timer: null },
-    { id: 7, seats: 4, status: 'waiting-order', order: [{ name: 'Пицца Маргарита', qty: 1, price: 520 }], timer: 7 },
-    { id: 8, seats: 2, status: 'overdue', order: [{ name: 'Суп-пюре', qty: 1, price: 310 }], timer: 31 },
-    { id: 9, seats: 4, status: 'free', order: null, timer: null },
-    { id: 10, seats: 8, status: 'waiting-payment', order: [{ name: 'Банкетное меню', qty: 1, price: 18000 }], timer: 12 },
-];
-const OWNERS_KITCHEN = [
-    { id: 'A12', table: 2, items: ['Салат Цезарь x2', 'Стейк Рибай'], zone: 'cold', timer: 18, burning: true },
-    { id: 'A13', table: 4, items: ['Борщ x3', 'Котлета x3'], zone: 'hot', timer: 22, burning: true },
-    { id: 'A14', table: 7, items: ['Пицца Маргарита'], zone: 'hot', timer: 7, burning: false },
-    { id: 'A15', table: 8, items: ['Суп-пюре'], zone: 'hot', timer: 31, burning: true },
-    { id: 'A16', table: 10, items: ['Банкет: закуски'], zone: 'cold', timer: 12, burning: false },
-];
-const OWNERS_BOOKINGS = [
-    { time: '18:00', name: 'Иванов А.', guests: 4, table: 3, vip: true, deposit: 5000, history: 'Любит стол у окна, аллергия на морепродукты' },
-    { time: '19:30', name: 'Петрова Е.', guests: 2, table: 1, vip: false, deposit: 0, history: 'Предпочитает тихий угол' },
-    { time: '20:00', name: 'Сидоров М.', guests: 8, table: 10, vip: true, deposit: 15000, history: 'День рождения, нужен торт' },
-];
-let ownersCurrentTable = null;
+<script type="module">
+// ==================== FIREBASE INIT ====================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get, onValue, update, push } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const STAFF_MENU = [
-    { name: 'Салат Цезарь', cost: 180, price: 450, margin: 60, restaurants: ['Центральный','Парковый','Набережный'], modifiers: ['Без курицы','Двойная порция'] },
-    { name: 'Борщ', cost: 95, price: 290, margin: 67, restaurants: ['Центральный','Парковый'], modifiers: ['Со сметаной'] },
-    { name: 'Стейк Рибай', cost: 650, price: 1450, margin: 55, restaurants: ['Центральный','Набережный'], modifiers: ['Rare','Medium','Well Done'] },
-    { name: 'Пицца Маргарита', cost: 210, price: 520, margin: 60, restaurants: ['Парковый','Набережный'], modifiers: ['Без сыра','Острый соус'] },
-];
-const STAFF_EMPLOYEES = [
-    { name: 'Анна Кузнецова', role: 'Официант', medbook: '2026-09-15', status: 'active' },
-    { name: 'Иван Петров', role: 'Повар', medbook: '2026-04-20', status: 'warning' },
-    { name: 'Ольга Сидорова', role: 'Менеджер', medbook: '2027-01-10', status: 'active' },
-    { name: 'Дмитрий Волков', role: 'Стажёр', medbook: '—', status: 'danger' },
-];
-const STAFF_SHIFTS = [
-    { from: 'Анна К.', to: 'Елена М.', date: '2026-06-22', status: 'pending' },
-    { from: 'Иван П.', to: 'Сергей К.', date: '2026-06-23', status: 'approved' },
-];
-const STAFF_WAITERS = [
-    { name: 'Анна К.', avgCheck: 3200, tips: 18000, sales: 12, rank: 1 },
-    { name: 'Елена М.', avgCheck: 2800, tips: 14500, sales: 8, rank: 2 },
-    { name: 'Алексей Д.', avgCheck: 4100, tips: 22000, sales: 15, rank: 3 },
-];
+const firebaseConfig = { databaseURL: "https://coursework-b5a72-default-rtdb.firebaseio.com" };
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-const GUEST_MENU = [
-    { id: 1, name: 'Салат Цезарь', desc: 'Куриное филе, салат, пармезан, гренки', price: 450 },
-    { id: 2, name: 'Борщ', desc: 'Классический со сметаной', price: 290 },
-    { id: 3, name: 'Стейк Рибай', desc: 'Мраморная говядина, 250г', price: 1450 },
-    { id: 4, name: 'Пицца Маргарита', desc: 'Томаты, моцарелла, базилик', price: 520 },
-    { id: 5, name: 'Тирамису', desc: 'Классический итальянский десерт', price: 380 },
-    { id: 6, name: 'Окрошка', desc: 'На кефире, со льдом', price: 260 },
-];
-let guestCart = [];
+// ==================== STATUS BAR ====================
+const statusBar = document.getElementById('statusBar');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+
+function setStatus(state, text) {
+    statusBar.className = 'status-bar ' + state;
+    statusText.textContent = text;
+    statusDot.className = 'status-dot ' + (state === 'connected' ? 'green' : state === 'syncing' ? 'yellow' : 'red');
+}
+
+// Проверка соединения через .info/connected
+const connectedRef = ref(db, '.info/connected');
+onValue(connectedRef, (snap) => {
+    if (snap.val() === true) {
+        setStatus('connected', 'Firebase подключён • Данные синхронизируются');
+        initData(); // Загружаем начальные данные, если база пуста
+    } else {
+        setStatus('disconnected', 'Нет соединения с Firebase');
+    }
+});
+
+// ==================== DEFAULT DATA ====================
+const DEFAULT_TABLES = {
+    table_1: { id: 1, seats: 2, status: 'free', order: null, timer: null },
+    table_2: { id: 2, seats: 4, status: 'waiting-order', order: [{ name: 'Салат Цезарь', qty: 2, price: 450 }], timer: 18 },
+    table_3: { id: 3, seats: 2, status: 'free', order: null, timer: null },
+    table_4: { id: 4, seats: 6, status: 'waiting-order', order: [{ name: 'Борщ', qty: 3, price: 290 }], timer: 22 },
+    table_5: { id: 5, seats: 4, status: 'free', order: null, timer: null },
+    table_6: { id: 6, seats: 2, status: 'free', order: null, timer: null },
+    table_7: { id: 7, seats: 4, status: 'waiting-order', order: [{ name: 'Пицца Маргарита', qty: 1, price: 520 }], timer: 7 },
+    table_8: { id: 8, seats: 2, status: 'overdue', order: [{ name: 'Суп-пюре', qty: 1, price: 310 }], timer: 31 },
+    table_9: { id: 9, seats: 4, status: 'free', order: null, timer: null },
+    table_10: { id: 10, seats: 8, status: 'waiting-payment', order: [{ name: 'Банкетное меню', qty: 1, price: 18000 }], timer: 12 },
+};
+
+const DEFAULT_KITCHEN = {
+    order_A12: { id: 'A12', table: 2, items: ['Салат Цезарь x2'], zone: 'cold', timer: 18, burning: true },
+    order_A13: { id: 'A13', table: 4, items: ['Борщ x3'], zone: 'hot', timer: 22, burning: true },
+    order_A14: { id: 'A14', table: 7, items: ['Пицца Маргарита'], zone: 'hot', timer: 7, burning: false },
+    order_A15: { id: 'A15', table: 8, items: ['Суп-пюре'], zone: 'hot', timer: 31, burning: true },
+};
+
+const DEFAULT_BOOKINGS = {
+    booking_1: { time: '18:00', name: 'Иванов А.', guests: 4, table: 3, vip: true, deposit: 5000 },
+    booking_2: { time: '19:30', name: 'Петрова Е.', guests: 2, table: 1, vip: false, deposit: 0 },
+    booking_3: { time: '20:00', name: 'Сидоров М.', guests: 8, table: 10, vip: true, deposit: 15000 },
+};
+
+const DEFAULT_MENU = {
+    dish_1: { id: 1, name: 'Салат Цезарь', desc: 'Куриное филе, салат, пармезан, гренки', price: 450 },
+    dish_2: { id: 2, name: 'Борщ', desc: 'Классический со сметаной', price: 290 },
+    dish_3: { id: 3, name: 'Стейк Рибай', desc: 'Мраморная говядина, 250г', price: 1450 },
+    dish_4: { id: 4, name: 'Пицца Маргарита', desc: 'Томаты, моцарелла, базилик', price: 520 },
+    dish_5: { id: 5, name: 'Тирамису', desc: 'Классический итальянский десерт', price: 380 },
+    dish_6: { id: 6, name: 'Окрошка', desc: 'На кефире, со льдом', price: 260 },
+};
+
+const DEFAULT_REVIEWS = {
+    review_1: { author: 'Анна', rating: 5, text: 'Отличный стейк! Всё понравилось.', time: '2 мин назад' },
+    review_2: { author: 'Михаил', rating: 2, text: 'Долго ждали заказ. Суп был холодным.', time: '15 мин назад', adminNote: '✅ Администратор решает проблему' },
+};
+
+// ==================== INIT DATA (заполняем базу, если пуста) ====================
+async function initData() {
+    setStatus('syncing', 'Проверка данных...');
+    try {
+        const tablesSnap = await get(ref(db, 'tables'));
+        if (!tablesSnap.exists()) {
+            await set(ref(db, 'tables'), DEFAULT_TABLES);
+            await set(ref(db, 'kitchen'), DEFAULT_KITCHEN);
+            await set(ref(db, 'bookings'), DEFAULT_BOOKINGS);
+            await set(ref(db, 'menu'), DEFAULT_MENU);
+            await set(ref(db, 'reviews'), DEFAULT_REVIEWS);
+            console.log('✅ Начальные данные загружены в Firebase');
+        }
+        setStatus('connected', 'Firebase готов • Данные синхронизируются');
+    } catch (e) {
+        console.error('Ошибка инициализации:', e);
+        setStatus('disconnected', 'Ошибка загрузки данных');
+    }
+}
 
 // ==================== NAVIGATION ====================
 function navigate(page) {
@@ -381,12 +348,8 @@ function navigate(page) {
     const target = document.getElementById('page-' + page);
     if (target) target.classList.add('active');
     window.location.hash = page === 'home' ? '' : page;
-    if (page === 'owners') refreshOwners();
-    if (page === 'staff') refreshStaff();
-    if (page === 'guest') refreshGuest();
 }
 
-// Hash routing
 window.addEventListener('hashchange', () => {
     const hash = window.location.hash.slice(1) || 'home';
     navigate(hash);
@@ -396,189 +359,344 @@ window.addEventListener('load', () => {
     navigate(hash);
 });
 
+// Глобальная функция navigate
+window.navigate = navigate;
+
 // ==================== SUBVIEW SWITCHING ====================
-function setupSubviews(pagePrefix, containerSelector) {
-    const container = document.querySelector(containerSelector);
-    if (!container) return;
-    container.querySelectorAll('nav a').forEach(link => {
+function setupSubviews(sidebarSelector, prefix) {
+    const sidebar = document.querySelector(sidebarSelector);
+    if (!sidebar) return;
+    sidebar.querySelectorAll('nav a').forEach(link => {
         link.addEventListener('click', function(e) {
             e.preventDefault();
-            container.querySelectorAll('nav a').forEach(l => l.classList.remove('active'));
+            sidebar.querySelectorAll('nav a').forEach(l => l.classList.remove('active'));
             this.classList.add('active');
             const subview = this.dataset.subview;
-            const main = container.querySelector('.main');
+            const main = sidebar.parentElement.querySelector('.main');
             if (main) {
                 main.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
-                const panel = main.querySelector(`.view-panel[data-${pagePrefix}="${subview}"]`);
+                const panel = main.querySelector(`.view-panel[data-${prefix}="${subview}"]`);
                 if (panel) panel.classList.add('active');
             }
         });
     });
 }
 
-setupSubviews('owners', '#page-owners');
-setupSubviews('staff', '#page-staff');
-setupSubviews('finance', '#page-finance');
-setupSubviews('warehouse', '#page-warehouse');
+setupSubviews('#page-owners', 'owners');
+setupSubviews('#page-staff', 'staff');
 
 // Guest tabs
 document.querySelectorAll('#page-guest [data-guest]').forEach(btn => {
     btn.addEventListener('click', function() {
-        const guestView = this.dataset.guest;
         document.querySelectorAll('#page-guest [data-guest]').forEach(b => b.classList.remove('active'));
         this.classList.add('active');
         document.querySelectorAll('#page-guest .view-panel').forEach(p => p.classList.remove('active'));
-        const panel = document.querySelector(`#page-guest .view-panel[data-guest="${guestView}"]`);
+        const panel = document.querySelector(`#page-guest .view-panel[data-guest="${this.dataset.guest}"]`);
         if (panel) panel.classList.add('active');
     });
 });
 
-// ==================== OWNERS LOGIC ====================
+// ==================== REALTIME SUBSCRIPTIONS ====================
+let currentTables = {};
+let currentKitchen = {};
+let currentBookings = {};
+let currentMenu = {};
+let currentReviews = {};
+
+// Подписка на столы (realtime)
+onValue(ref(db, 'tables'), (snapshot) => {
+    if (snapshot.exists()) {
+        currentTables = snapshot.val();
+        renderAllOwnersFloors();
+        renderOwnersDashboardMetrics();
+        updateGuestTableAvailability();
+        document.getElementById('ownersSyncStatus').textContent = '🟢 Live';
+        setTimeout(() => { document.getElementById('ownersSyncStatus').textContent = ''; }, 2000);
+    }
+});
+
+// Подписка на кухню
+onValue(ref(db, 'kitchen'), (snapshot) => {
+    if (snapshot.exists()) {
+        currentKitchen = snapshot.val();
+        renderOwnersKitchen('ownersKitchenBoard');
+        renderOwnersKitchen('ownersMiniKitchen');
+    }
+});
+
+// Подписка на бронирования
+onValue(ref(db, 'bookings'), (snapshot) => {
+    if (snapshot.exists()) {
+        currentBookings = snapshot.val();
+        renderOwnersBookings();
+    }
+});
+
+// Подписка на меню
+onValue(ref(db, 'menu'), (snapshot) => {
+    if (snapshot.exists()) {
+        currentMenu = snapshot.val();
+        renderGuestMenu();
+        renderStaffMenu();
+    }
+});
+
+// Подписка на отзывы
+onValue(ref(db, 'reviews'), (snapshot) => {
+    if (snapshot.exists()) {
+        currentReviews = snapshot.val();
+        renderGuestReviews();
+    }
+});
+
+// ==================== OWNERS RENDER FUNCTIONS ====================
+function renderAllOwnersFloors() {
+    renderOwnersFloor('ownersFullFloor');
+    renderOwnersFloor('ownersMiniFloor');
+}
+
 function renderOwnersFloor(containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    container.innerHTML = OWNERS_TABLES.map(t => {
-        let cls = t.status;
-        return `<div class="table-spot ${cls}" onclick="openOwnersTable(${t.id})" title="Стол №${t.id} (${t.seats} мест)${t.timer ? ' • ⏱ ' + t.timer + ' мин' : ''}"><span>${t.id}</span><span class="table-seats">${t.seats} мест</span></div>`;
+    const tables = Object.values(currentTables);
+    container.innerHTML = tables.map(t => {
+        let cls = t.status || 'free';
+        return `<div class="table-spot ${cls}" onclick="openOwnersTable('${t.id}')" title="Стол №${t.id} (${t.seats} мест)${t.timer ? ' • ⏱ ' + t.timer + ' мин' : ''}"><span>${t.id}</span><span class="table-seats">${t.seats} мест</span></div>`;
     }).join('');
 }
 
 function renderOwnersKitchen(containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    const hot = OWNERS_KITCHEN.filter(o => o.zone === 'hot');
-    const cold = OWNERS_KITCHEN.filter(o => o.zone === 'cold');
+    const orders = Object.values(currentKitchen);
+    const hot = orders.filter(o => o.zone === 'hot');
+    const cold = orders.filter(o => o.zone === 'cold');
     container.innerHTML = `
         <div class="kitchen-col"><h4>🍲 Горячий цех</h4>${hot.map(o => `<div class="order-ticket ${o.burning ? 'burning' : ''}"><div class="order-ticket-header"><span class="order-ticket-id">#${o.id} Стол ${o.table}</span><span class="order-timer">⏱ ${o.timer} мин</span></div><div>${o.items.join('<br>')}</div></div>`).join('')}</div>
         <div class="kitchen-col"><h4>🥗 Холодный цех</h4>${cold.map(o => `<div class="order-ticket ${o.burning ? 'burning' : ''}"><div class="order-ticket-header"><span class="order-ticket-id">#${o.id} Стол ${o.table}</span><span class="order-timer">⏱ ${o.timer} мин</span></div><div>${o.items.join('<br>')}</div></div>`).join('')}</div>`;
 }
 
+function renderOwnersDashboardMetrics() {
+    const tables = Object.values(currentTables);
+    const occupied = tables.filter(t => t.status === 'waiting-order' || t.status === 'waiting-payment' || t.status === 'overdue').length;
+    const overdue = tables.filter(t => t.status === 'overdue').length;
+    const free = tables.filter(t => t.status === 'free').length;
+    const totalRevenue = tables.reduce((sum, t) => sum + (t.order ? t.order.reduce((s, i) => s + i.price * i.qty, 0) : 0), 0);
+
+    document.getElementById('ownersMetrics').innerHTML = `
+        <div class="card"><div class="metric"><div class="metric-value up">₽${totalRevenue.toLocaleString()}</div><div class="metric-label">Выручка (активные заказы)</div></div></div>
+        <div class="card"><div class="metric"><div class="metric-value">${occupied}</div><div class="metric-label">Занято столов</div></div></div>
+        <div class="card"><div class="metric"><div class="metric-value down">${overdue}</div><div class="metric-label">Просрочено</div></div></div>
+        <div class="card"><div class="metric"><div class="metric-value up">${free}</div><div class="metric-label">Свободно</div></div></div>`;
+}
+
 function renderOwnersBookings() {
     const container = document.getElementById('ownersBookingList');
     if (!container) return;
-    container.innerHTML = OWNERS_BOOKINGS.map(b => `
-        <div class="booking-slot"><div><strong>🕐 ${b.time}</strong> — ${b.name} (${b.guests} чел.) → Стол №${b.table}<div style="font-size:11px;color:var(--muted);">📝 ${b.history}</div></div><div>${b.vip ? '<span class="badge badge-vip">VIP</span>' : ''} ${b.deposit ? '<span class="badge badge-deposit">💰 '+b.deposit+'₽</span>' : ''}</div></div>
+    const bookings = Object.values(currentBookings);
+    container.innerHTML = bookings.map(b => `
+        <div class="booking-slot"><div><strong>🕐 ${b.time}</strong> — ${b.name} (${b.guests} чел.) → Стол №${b.table}</div><div>${b.vip ? '<span class="badge badge-vip">VIP</span>' : ''} ${b.deposit ? '<span class="badge badge-deposit">💰 '+b.deposit+'₽</span>' : ''}</div></div>
     `).join('');
 }
 
-function openOwnersTable(id) {
-    const table = OWNERS_TABLES.find(t => t.id === id);
-    if (!table || !table.order) { alert('Стол №' + id + ' свободен.'); return; }
-    ownersCurrentTable = table;
-    document.getElementById('ownersModalTitle').textContent = `Стол №${table.id} (${table.seats} мест)`;
+// ==================== OWNERS TABLE MODAL ====================
+let ownersCurrentTableId = null;
+
+window.openOwnersTable = function(tableId) {
+    const table = currentTables['table_' + tableId];
+    if (!table || !table.order) { alert('Стол №' + tableId + ' свободен.'); return; }
+    ownersCurrentTableId = 'table_' + tableId;
+    document.getElementById('ownersModalTitle').textContent = `Стол №${table.id} (${table.seats} мест) • ⏱ ${table.timer || 0} мин`;
     document.getElementById('ownersModalContent').innerHTML = table.order.map(i => `<div class="order-item"><span>${i.name}</span><span>x${i.qty} — ${i.price} ₽</span></div>`).join('') + `<div class="order-item" style="font-weight:700;"><span>Итого</span><span>${table.order.reduce((s,i) => s + i.price*i.qty, 0)} ₽</span></div>`;
-    document.getElementById('ownersModalTimer').textContent = `⏱ ${table.timer} мин ${table.status === 'overdue' ? '— ПРОСРОЧЕН!' : ''}`;
     document.getElementById('ownersTableModal').classList.add('active');
-}
+};
 
-function closeOwnersModal() { document.getElementById('ownersTableModal').classList.remove('active'); ownersCurrentTable = null; }
-function closeTableOwners() {
-    if (ownersCurrentTable) { ownersCurrentTable.status = 'free'; ownersCurrentTable.order = null; ownersCurrentTable.timer = null; }
+window.closeOwnersModal = function() {
+    document.getElementById('ownersTableModal').classList.remove('active');
+    ownersCurrentTableId = null;
+};
+
+window.closeTableOwners = async function() {
+    if (!ownersCurrentTableId) return;
+    setStatus('syncing', 'Закрытие стола...');
+    try {
+        await update(ref(db, `tables/${ownersCurrentTableId}`), { status: 'free', order: null, timer: null });
+        setStatus('connected', '✅ Стол закрыт');
+    } catch (e) {
+        console.error(e);
+        setStatus('disconnected', 'Ошибка при закрытии стола');
+    }
     closeOwnersModal();
-    refreshOwners();
-}
+};
 
-function refreshOwners() {
-    document.getElementById('ownersMetrics').innerHTML = `
-        <div class="card"><div class="metric"><div class="metric-value up">₽285 400</div><div class="metric-label">Выручка сегодня</div><div class="metric-change" style="color:var(--success)">↑12%</div></div></div>
-        <div class="card"><div class="metric"><div class="metric-value">68</div><div class="metric-label">Гостей</div></div></div>
-        <div class="card"><div class="metric"><div class="metric-value down">4</div><div class="metric-label">Просрочено</div></div></div>
-        <div class="card"><div class="metric"><div class="metric-value warn">32%</div><div class="metric-label">Food Cost</div></div></div>`;
-    renderOwnersFloor('ownersFullFloor'); renderOwnersFloor('ownersMiniFloor');
-    renderOwnersKitchen('ownersKitchenBoard'); renderOwnersKitchen('ownersMiniKitchen');
-    renderOwnersBookings();
-    document.getElementById('ownersFoodCost').innerHTML = `<div style="display:flex;gap:30px;align-items:flex-end;height:140px;"><div style="flex:1;text-align:center;"><div style="height:85px;background:var(--success);border-radius:6px 6px 0 0;"></div><small style="color:var(--muted);">План<br>28%</small></div><div style="flex:1;text-align:center;"><div style="height:105px;background:var(--danger);border-radius:6px 6px 0 0;"></div><small style="color:var(--muted);">Факт<br>32%</small></div></div><p style="color:var(--danger);text-align:center;margin-top:12px;">⚠️ +4% (~32 500 ₽/день)</p>`;
-    document.getElementById('ownersEbitda').innerHTML = `<table><tr><td>Центральный</td><td style="color:var(--success)">12 400 ₽/м²</td></tr><tr><td>Парковый</td><td>9 800 ₽/м²</td></tr><tr><td>Набережный</td><td style="color:var(--danger)">6 200 ₽/м²</td></tr></table>`;
-    document.getElementById('ownersML').innerHTML = `<div class="grid-3"><div><div class="metric-value up">₽310K</div><div class="metric-label">Прогноз</div></div><div><div class="metric-value">☀️+28°C</div><div class="metric-label">Погода</div></div><div><div class="metric-value warn">+30%</div><div class="metric-label">К супам</div></div></div>`;
-    document.getElementById('ownersNetworkMetrics').innerHTML = `<div class="card"><div class="metric"><div class="metric-value up">₽1 240K</div><div class="metric-label">Выручка сети</div></div></div><div class="card"><div class="metric"><div class="metric-value">312</div><div class="metric-label">Гостей</div></div></div><div class="card"><div class="metric"><div class="metric-value warn">31%</div><div class="metric-label">Food Cost</div></div></div>`;
-    document.getElementById('ownersNetworkComparison').innerHTML = `<table><tr><th>Ресторан</th><th>Выручка</th><th>Food Cost</th><th>EBITDA/м²</th></tr><tr><td>Центральный</td><td style="color:var(--success)">₽485K</td><td>28%</td><td style="color:var(--success)">12 400</td></tr><tr><td>Парковый</td><td>₽420K</td><td>30%</td><td>9 800</td></tr><tr><td>Набережный</td><td style="color:var(--danger)">₽335K</td><td style="color:var(--danger)">35%</td><td style="color:var(--danger)">6 200</td></tr></table>`;
-}
-
-// ==================== STAFF LOGIC ====================
-function renderStaffMenu(filter = 'Все рестораны') {
+// ==================== STAFF RENDER ====================
+function renderStaffMenu() {
     const tbody = document.getElementById('staffMenuBody');
     if (!tbody) return;
-    const filtered = filter === 'Все рестораны' ? STAFF_MENU : STAFF_MENU.filter(m => m.restaurants.includes(filter));
-    tbody.innerHTML = filtered.map(m => `<tr><td><strong>${m.name}</strong><br><small style="color:var(--muted)">${m.modifiers.join(', ')}</small></td><td>${m.cost}₽</td><td>${m.price}₽</td><td style="color:${m.margin>60?'var(--success)':'var(--warning)'}">${m.margin}%</td><td>${m.restaurants.map(r=>`<span class="tag tag-${r==='Центральный'?'success':r==='Парковый'?'warning':'info'}">${r}</span>`).join(' ')}</td><td><button class="btn btn-ghost btn-sm" onclick="openStaffTechModal()">✏️</button></td></tr>`).join('');
+    const menu = Object.values(currentMenu);
+    tbody.innerHTML = menu.map(d => `<tr><td><strong>${d.name}</strong><br><small style="color:var(--muted);">${d.desc}</small></td><td>${d.price} ₽</td><td><button class="btn btn-ghost btn-sm" onclick="alert('Редактирование: ${d.name}')">✏️</button></td></tr>`).join('');
 }
 
 function renderStaffHR() {
     const tbody = document.getElementById('staffHrBody');
     if (!tbody) return;
-    tbody.innerHTML = STAFF_EMPLOYEES.map(s => `<tr><td>${s.name}</td><td>${s.role}</td><td>${s.medbook} ${s.medbook!=='—' && new Date(s.medbook) < new Date('2026-08-01') ? '<span class="tag tag-danger">⚠️ Дедлайн</span>' : ''}</td><td><span class="tag tag-${s.status==='active'?'success':s.status==='warning'?'warning':'danger'}">${s.status==='active'?'✅ Активен':s.status==='warning'?'⚠️ Проверить':'🚫 Стажёр'}</span></td></tr>`).join('');
+    const staff = [
+        { name: 'Анна Кузнецова', role: 'Официант', medbook: '2026-09-15' },
+        { name: 'Иван Петров', role: 'Повар', medbook: '2026-04-20' },
+        { name: 'Ольга Сидорова', role: 'Менеджер', medbook: '2027-01-10' },
+        { name: 'Дмитрий Волков', role: 'Стажёр', medbook: '—' },
+    ];
+    tbody.innerHTML = staff.map(s => `<tr><td>${s.name}</td><td>${s.role}</td><td>${s.medbook}</td></tr>`).join('');
 }
 
 function renderStaffShifts() {
     const container = document.getElementById('staffShiftsBody');
     if (!container) return;
-    container.innerHTML = STAFF_SHIFTS.map(s => `<div style="background:var(--surface-hover);border-radius:10px;padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;"><div><strong>${s.from}</strong> → <strong>${s.to}</strong> | 📅 ${s.date}</div><div>${s.status==='pending' ? '<button class="btn btn-accent btn-sm" onclick="this.closest(\'div\').querySelector(\'div\').innerHTML=\'✅ Одобрено\'">Одобрить</button> <button class="btn btn-ghost btn-sm" onclick="this.closest(\'div\').querySelector(\'div\').innerHTML=\'❌ Отклонено\'">Отклонить</button>' : '✅ Одобрено'}</div></div>`).join('');
+    const shifts = [
+        { from: 'Анна К.', to: 'Елена М.', date: '2026-06-22', status: 'pending' },
+        { from: 'Иван П.', to: 'Сергей К.', date: '2026-06-23', status: 'approved' },
+    ];
+    container.innerHTML = shifts.map(s => `<div style="background:var(--surface-hover);border-radius:10px;padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;"><div><strong>${s.from}</strong> → <strong>${s.to}</strong> | 📅 ${s.date}</div><div>${s.status==='pending' ? '<button class="btn btn-accent btn-sm" onclick="this.closest(\'div\').querySelector(\'div\').innerHTML=\'✅ Одобрено\'">Одобрить</button>' : '✅ Одобрено'}</div></div>`).join('');
 }
 
-function renderStaffGamification() {
-    const container = document.getElementById('staffGamificationBody');
-    if (!container) return;
-    container.innerHTML = STAFF_WAITERS.map(w => `<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;padding:14px;background:var(--surface-hover);border-radius:10px;"><div style="font-size:28px;">${w.rank===1?'🥇':w.rank===2?'🥈':'🥉'}</div><div style="flex:1;"><strong>${w.name}</strong><br><small style="color:var(--muted);">Ср. чек: ${w.avgCheck}₽ | Чаевые: ${w.tips}₽</small></div><div style="text-align:right;"><div style="color:var(--accent);font-weight:700;">${w.sales*100} баллов</div><div class="progress-bar"><div class="progress-fill" style="width:${Math.min(w.sales/20*100,100)}%;background:var(--accent);"></div></div></div></div>`).join('');
-}
+// ==================== GUEST RENDER ====================
+let guestCart = [];
 
-function openStaffTechModal() { document.getElementById('staffTechModal').classList.add('active'); }
-function closeStaffTechModal() { document.getElementById('staffTechModal').classList.remove('active'); }
-function saveStaffTech() { closeStaffTechModal(); alert('✅ Техкарта сохранена!'); }
-function refreshStaff() { renderStaffMenu(); renderStaffHR(); renderStaffShifts(); renderStaffGamification(); }
-window.renderStaffMenu = renderStaffMenu;
-
-// ==================== GUEST LOGIC ====================
 function renderGuestMenu() {
     const container = document.getElementById('guestMenuGrid');
     if (!container) return;
-    container.innerHTML = GUEST_MENU.map(item => `<div class="menu-item"><h4>${item.name}</h4><div class="desc">${item.desc}</div><div class="price">${item.price} ₽</div><button class="add-btn" onclick="guestAddToCart(${item.id})">➕ В заказ</button></div>`).join('');
+    const menu = Object.values(currentMenu);
+    container.innerHTML = menu.map(item => `<div class="menu-item"><h4>${item.name}</h4><div class="desc">${item.desc}</div><div class="price">${item.price} ₽</div><button class="add-btn" onclick="guestAddToCart('${item.id}')">➕ В заказ</button></div>`).join('');
 }
 
-function guestAddToCart(itemId) {
-    const item = GUEST_MENU.find(i => i.id === itemId);
-    const existing = guestCart.find(i => i.id === itemId);
+window.guestAddToCart = function(itemId) {
+    const menu = Object.values(currentMenu);
+    const item = menu.find(i => i.id == itemId);
+    if (!item) return;
+    const existing = guestCart.find(i => i.id == itemId);
     if (existing) existing.qty++;
     else guestCart.push({ ...item, qty: 1 });
     guestUpdateCart();
-    // Рекомендации
-    const recs = GUEST_MENU.filter(i => i.id !== itemId).slice(0, 2);
-    document.getElementById('guestRecommendations').style.display = 'block';
-    document.getElementById('guestRecContent').innerHTML = `<p style="font-size:13px;color:var(--muted);margin-bottom:8px;">К «${item.name}» часто заказывают:</p>${recs.map(r => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span>${r.name}</span><span style="color:var(--accent);">${r.price}₽</span><button class="btn btn-ghost btn-sm" onclick="guestAddToCart(${r.id})">+</button></div>`).join('')}`;
-}
+};
 
-function guestRemoveFromCart(itemId) {
-    const existing = guestCart.find(i => i.id === itemId);
+window.guestRemoveFromCart = function(itemId) {
+    const existing = guestCart.find(i => i.id == itemId);
     if (existing && existing.qty > 1) existing.qty--;
-    else guestCart = guestCart.filter(i => i.id !== itemId);
+    else guestCart = guestCart.filter(i => i.id != itemId);
     guestUpdateCart();
-}
+};
 
 function guestUpdateCart() {
     const count = guestCart.reduce((s, i) => s + i.qty, 0);
     const badge = document.getElementById('guestCartBadge'); if (badge) badge.textContent = count;
     const total = guestCart.reduce((s, i) => s + i.price * i.qty, 0);
     const container = document.getElementById('guestCartItems');
-    if (container) container.innerHTML = guestCart.length === 0 ? '<p style="color:var(--muted);">Пусто</p>' : guestCart.map(i => `<div class="cart-item"><span>${i.name}</span><div class="qty"><button onclick="guestRemoveFromCart(${i.id})">−</button><span>${i.qty}</span><button onclick="guestAddToCart(${i.id})">+</button><span style="min-width:50px;text-align:right;">${i.price*i.qty}₽</span></div></div>`).join('');
+    if (container) container.innerHTML = guestCart.length === 0 ? '<p style="color:var(--muted);">Пусто</p>' : guestCart.map(i => `<div class="cart-item"><span>${i.name}</span><div class="qty"><button onclick="guestRemoveFromCart('${i.id}')">−</button><span>${i.qty}</span><button onclick="guestAddToCart('${i.id}')">+</button><span style="min-width:50px;text-align:right;">${i.price*i.qty}₽</span></div></div>`).join('');
     const totalEl = document.getElementById('guestCartTotal');
     if (totalEl) totalEl.innerHTML = total > 0 ? `<span>Итого:</span><span>${total} ₽</span>` : '';
     const btn = document.getElementById('guestSubmitBtn');
     if (btn) btn.disabled = guestCart.length === 0;
 }
 
-function submitGuestOrder() {
+window.submitGuestOrder = async function() {
     if (guestCart.length === 0) return;
-    alert('✅ Заказ отправлен на кухню!\n\n' + guestCart.map(i => `${i.name} x${i.qty} — ${i.price*i.qty}₽`).join('\n') + '\n\nИтого: ' + guestCart.reduce((s,i) => s + i.price*i.qty, 0) + '₽');
-    guestCart = [];
-    guestUpdateCart();
-    document.getElementById('guestRecommendations').style.display = 'none';
+    const tableId = 3; // Стол №3 для демо
+    const orderId = 'A' + Date.now().toString(36).toUpperCase();
+    const zone = Math.random() > 0.5 ? 'hot' : 'cold';
+    const orderData = {
+        id: orderId,
+        table: tableId,
+        items: guestCart.map(i => `${i.name} x${i.qty}`),
+        zone: zone,
+        timer: Math.floor(Math.random() * 20) + 5,
+        burning: false
+    };
+
+    setStatus('syncing', 'Отправка заказа...');
+    try {
+        // Сохраняем заказ в кухню
+        await set(ref(db, `kitchen/order_${orderId}`), orderData);
+
+        // Обновляем статус стола
+        const tableRef = ref(db, `tables/table_${tableId}`);
+        const tableSnap = await get(tableRef);
+        if (tableSnap.exists()) {
+            await update(tableRef, {
+                status: 'waiting-order',
+                order: guestCart.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
+                timer: orderData.timer
+            });
+        }
+
+        setStatus('connected', '✅ Заказ отправлен на кухню!');
+        alert('✅ Заказ отправлен на кухню!\n\nНомер заказа: #' + orderId + '\n\n' + guestCart.map(i => `${i.name} x${i.qty} — ${i.price*i.qty}₽`).join('\n') + '\n\nИтого: ' + guestCart.reduce((s,i) => s + i.price*i.qty, 0) + '₽');
+        guestCart = [];
+        guestUpdateCart();
+    } catch (e) {
+        console.error(e);
+        setStatus('disconnected', 'Ошибка отправки заказа');
+        alert('❌ Ошибка при отправке заказа');
+    }
+};
+
+function renderGuestReviews() {
+    const container = document.getElementById('guestReviewsList');
+    if (!container) return;
+    const reviews = Object.values(currentReviews);
+    container.innerHTML = reviews.map(r => `
+        <div class="review">
+            <div class="flex-between"><strong>${r.author}</strong><span style="font-size:11px;color:var(--muted);">${r.time}</span></div>
+            <div class="stars">${'⭐'.repeat(r.rating)}</div>
+            <p style="font-size:13px;margin-top:4px;">${r.text}</p>
+            ${r.adminNote ? `<div style="margin-top:8px;padding:8px;background:#14532d;border-radius:6px;font-size:12px;color:#86efac;">${r.adminNote}</div>` : ''}
+        </div>
+    `).join('');
 }
 
-function refreshGuest() { renderGuestMenu(); guestUpdateCart(); }
+window.submitGuestReview = async function() {
+    const text = document.getElementById('guestReviewText').value.trim();
+    const rating = parseInt(document.getElementById('guestReviewRating').value);
+    if (!text) return alert('Введите текст отзыва');
 
-// ==================== INITIAL SETUP ====================
-document.addEventListener('DOMContentLoaded', () => {
-    const hash = window.location.hash.slice(1) || 'home';
-    navigate(hash);
-});
+    setStatus('syncing', 'Отправка отзыва...');
+    try {
+        const newReviewRef = push(ref(db, 'reviews'));
+        await set(newReviewRef, {
+            author: 'Гость',
+            rating: rating,
+            text: text,
+            time: 'Только что'
+        });
+        document.getElementById('guestReviewText').value = '';
+        setStatus('connected', '✅ Отзыв отправлен');
+
+        // Если оценка < 4, алерт администратору
+        if (rating < 4) {
+            alert('⚠️ Администратор получил уведомление о вашей низкой оценке. Мы решим проблему!');
+        }
+    } catch (e) {
+        console.error(e);
+        setStatus('disconnected', 'Ошибка отправки отзыва');
+    }
+};
+
+function updateGuestTableAvailability() {
+    // Можно показывать гостю доступные столы
+    // В этой демо-версии просто обновляем UI
+}
+
+// ==================== INIT RENDERS (после загрузки данных) ====================
+// Рендеры срабатывают автоматически через onValue подписки
+// Дополнительно рендерим HR и Shifts (они статические)
+setTimeout(() => {
+    renderStaffHR();
+    renderStaffShifts();
+}, 1000);
+
+console.log('🚀 Restaurant ERP v2.0 запущен');
+console.log('📡 Firebase: https://coursework-b5a72-default-rtdb.firebaseio.com');
+console.log('🔄 Realtime синхронизация активна');
+console.log('👑 Откройте вкладку Владельца и Гостя одновременно — изменения синхронизируются!');
 </script>
 </body>
 </html>
